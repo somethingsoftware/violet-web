@@ -51,7 +51,10 @@ func migrationList() []migration {
 			1, "Create Users Table",
 			`CREATE TABLE user (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				username TEXT NOT NULL,
+				username TEXT UNIQUE NOT NULL,
+				email TEXT UNIQUE NOT NULL,
+				email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+				salt TEXT NOT NULL,
 				password_hash TEXT NOT NULL,
 				created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 			);`,
