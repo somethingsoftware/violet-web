@@ -32,11 +32,9 @@ func AutoUP(db *sql.DB) error {
 		if m.version <= currentVersion {
 			continue
 		}
-
 		if _, err := db.Exec(m.sql); err != nil {
 			return fmt.Errorf("failed to execute migration %d (%s): %v", m.version, m.name, err)
 		}
-
 		if _, err := db.Exec("UPDATE migration_version SET version = ?", m.version); err != nil {
 			return fmt.Errorf("failed to update migration version: %v", err)
 		}
@@ -67,6 +65,13 @@ func migrationList() []migration {
 				body TEXT NOT NULL,
 				created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY (user_id) REFERENCES users(id)
+			);`,
+		},
+		{
+			3, "Create Salt Table",
+			`CREATE TABLE salt (
+				intermediate_hash TEXT PRIMARY KEY UNIQUE NOT NULL,
+				salt TEXT NOT NULL
 			);`,
 		},
 	}
