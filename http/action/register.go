@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/somethingsoftware/violet-web/auth"
+	"github.com/somethingsoftware/violet-web/http/auth"
 )
 
 var usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)

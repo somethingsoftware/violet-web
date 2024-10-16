@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/somethingsoftware/violet-web/http/action"
+	"github.com/somethingsoftware/violet-web/http/session"
 	"github.com/somethingsoftware/violet-web/migrate"
 )
 
@@ -42,10 +43,12 @@ func main() {
 	}
 	slog.Info("Successfully migrated database")
 
+	sc := session.NewCache()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", serveUI)
-	mux.HandleFunc("POST /login", action.Login(db))
-	mux.HandleFunc("GET /user", action.User(db))
+	mux.HandleFunc("POST /login", action.Login(db, sc))
+	mux.HandleFunc("GET /user", loginRequired(sc, action.User(db, sc)))
 	mux.HandleFunc("POST /register", action.Register(db))
 
 	slog.Info("Starting server: http://localhost:" + strconv.Itoa(httpPort))
@@ -78,5 +81,16 @@ func serveUI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not found", http.StatusNotFound)
 		slog.Error("Not found", "path", r.URL.Path)
 		return
+	}
+}
+
+func loginRequired(sc *session.Cache, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, err := sc.GetSession(r)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
 	}
 }
