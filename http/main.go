@@ -48,7 +48,7 @@ func main() {
 	mux.HandleFunc("GET /user", action.User(db))
 	mux.HandleFunc("POST /register", action.Register(db))
 
-	slog.Info("Starting server", "port", httpPort)
+	slog.Info("Starting server: http://localhost:" + strconv.Itoa(httpPort))
 	portString := ":" + strconv.Itoa(httpPort)
 	err = http.ListenAndServe(portString, mux)
 	if err != nil {
