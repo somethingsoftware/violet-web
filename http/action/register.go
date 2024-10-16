@@ -80,6 +80,7 @@ func Register(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
 }

@@ -89,6 +89,7 @@ func loginRequired(sc *session.Cache, next http.HandlerFunc) http.HandlerFunc {
 		_, err := sc.GetSession(r)
 		if err != nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			slog.Error("Login required and failed", "error", err)
 			return
 		}
 		next(w, r)

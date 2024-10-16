@@ -42,7 +42,7 @@ func (sc *Cache) StartSession(w http.ResponseWriter, r *http.Request, userID uin
 
 	cookie := &http.Cookie{
 		Name:     "session",
-		Value:    string(sessionKey),
+		Value:    sessionKeyB64,
 		HttpOnly: true,
 		MaxAge:   24 * 3600,
 	}
@@ -57,12 +57,7 @@ func (sc *Cache) GetSession(r *http.Request) (Session, error) {
 		return Session{}, fmt.Errorf("failed to get session cookie: %w", err)
 	}
 
-	sessionKey, err := base64.StdEncoding.DecodeString(cookie.Value)
-	if err != nil {
-		return Session{}, fmt.Errorf("failed to decode session key: %w", err)
-	}
-
-	session, ok := sc.sessions[string(sessionKey)]
+	session, ok := sc.sessions[cookie.Value]
 	if !ok {
 		return Session{}, fmt.Errorf("session not found")
 	}

@@ -66,7 +66,7 @@ func validateLogin(db *sql.DB, username, password string) uint64 {
 	var userID uint64
 	query := `SELECT id, salt, password_hash FROM user WHERE username = ?`
 	row := db.QueryRow(query, username)
-	if err := row.Scan(&saltB64, &hashB64); err != nil {
+	if err := row.Scan(&userID, &saltB64, &hashB64); err != nil {
 		slog.Error("Failed getting user creds from db", "error", err)
 		return 0
 	}
