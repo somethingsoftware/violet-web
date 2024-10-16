@@ -23,7 +23,7 @@ var params = struct {
 }
 
 func NewArgon2Hash(password string) (salt, hash []byte, err error) {
-	salt, err = generateRandomBytes(params.saltLength)
+	salt, err = GenerateRandomBytes(params.saltLength)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -47,7 +47,7 @@ func HashArgon2(password string, salt []byte) ([]byte, error) {
 	return hash, nil
 }
 
-func generateRandomBytes(n uint32) ([]byte, error) {
+func GenerateRandomBytes(n uint32) ([]byte, error) {
 	b := make([]byte, n)
 	_, err := rand.Read(b)
 	if err != nil {
