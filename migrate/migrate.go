@@ -77,5 +77,16 @@ func migrationList() []migration {
 				salt TEXT NOT NULL
 			);`,
 		},
+		{
+			4, "Create CSRF Table",
+			`CREATE TABLE csrf (
+				id INTEGER PRIMARY KEY UNIQUE NOT NULL,
+				csrf_token TEXT NOT NULL,
+				used BOOLEAN NOT NULL DEFAULT FALSE,
+				user_agent TEXT NOT NULL,
+				ip TEXT NOT NULL,
+				created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+			);`,
+		},
 	}
 }

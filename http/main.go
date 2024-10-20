@@ -11,10 +11,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/somethingsoftware/violet-web/http/action"
+	"github.com/somethingsoftware/violet-web/http/csrf"
 	"github.com/somethingsoftware/violet-web/http/session"
 	"github.com/somethingsoftware/violet-web/migrate"
 	"golang.org/x/time/rate"
@@ -69,11 +71,21 @@ func main() {
 
 	rateLimitIP := newIPRateLimiterByIP(logger, 10*time.Second, 10)
 
+	csrfProvider := csrf.NewProvider(db, logger)
+	csrfValidate := csrfProvider.BuildValidator()
+
+	serveUI := buildServeUI(logger)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", serveUI)
-	mux.HandleFunc("POST /login", rateLimitIP(action.Login(db, sc, logger)))
+
+	mux.HandleFunc("GET /login", serveCSRF(csrfProvider, logger))
+	mux.HandleFunc("POST /login", csrfValidate(rateLimitIP(action.Login(db, sc, logger))))
+
+	mux.HandleFunc("GET /register", serveCSRF(csrfProvider, logger))
+	mux.HandleFunc("POST /register", csrfValidate(rateLimitIP(action.Register(db, logger))))
+
 	mux.HandleFunc("GET /user", rateLimitIP(loginRequired(action.User(db, sc, logger))))
-	mux.HandleFunc("POST /register", rateLimitIP(action.Register(db, logger)))
 
 	logger.Debug("Starting server: http://localhost:" + strconv.Itoa(httpPort))
 	portString := ":" + strconv.Itoa(httpPort)
@@ -96,28 +108,70 @@ func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
 	return h.Handler.Handle(ctx, r)
 }
 
-func serveUI(w http.ResponseWriter, r *http.Request) {
-	// TODO this should not be a relative path
-	switch r.URL.Path {
-	case "/", "/login":
-		http.ServeFile(w, r, "./static/login.html")
-		return
-	case "/register":
-		http.ServeFile(w, r, "./static/register.html")
-		return
-	case "/forgot":
-		http.ServeFile(w, r, "./static/forgot.html")
-		return
-	case "/favicon.ico":
-		http.ServeFile(w, r, "./static/favicon.ico")
-		return
-	case "/style.css":
-		http.ServeFile(w, r, "./static/style.css")
-		return
-	default:
-		http.Error(w, "Not found", http.StatusNotFound)
-		slog.Error("Not found", "path", r.URL.Path)
-		return
+func buildServeUI(logger *slog.Logger) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// TODO this should not be a relative path
+		switch r.URL.Path {
+		case "/":
+			http.ServeFile(w, r, "./static/index.html")
+			return
+		case "/forgot":
+			http.ServeFile(w, r, "./static/forgot.html")
+			return
+		case "/favicon.ico":
+			http.ServeFile(w, r, "./static/favicon.ico")
+			return
+		case "/style.css":
+			http.ServeFile(w, r, "./static/style.css")
+			return
+		default:
+			http.Error(w, "Not found", http.StatusNotFound)
+			logger.Error("Not found", "path", r.URL.Path)
+			return
+		}
+	}
+}
+
+func serveCSRF(csrfProvider *csrf.Provider, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		token, err := csrfProvider.MakeRequestToken(r)
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		type CSRFform struct {
+			CSRFToken string
+		}
+		form := CSRFform{CSRFToken: token}
+		templatePath := ""
+		switch r.URL.Path {
+		case "/login":
+			templatePath = "./gotmpl/login.gotmpl"
+		case "/register":
+			templatePath = "./gotmpl/register.gotmpl"
+		default:
+			http.Error(w, "Not found", http.StatusNotFound)
+			slog.Error("Not found", "path", r.URL.Path)
+			return
+		}
+		// can't user ParseFiles because I'm using relative paths
+		templateContent, err := os.ReadFile(templatePath)
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			logger.Error("Failed to read csrf template", "error", err, "path", templatePath)
+			return
+		}
+		t, err := template.New("csrf").Parse(string(templateContent))
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			logger.Error("Failed to parse template", "error", err)
+			return
+		}
+		if err = t.Execute(w, form); err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			logger.Error("Failed to execute template", "error", err)
+			return
+		}
 	}
 }
 
@@ -125,6 +179,7 @@ func loginChecker(sc *session.Cache, logger *slog.Logger) func(next http.Handler
 	// outer building function holds the session cache
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			// TODO should we require that the session stay on 1 ip?
 			_, err := sc.GetSession(r)
 			if err != nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)

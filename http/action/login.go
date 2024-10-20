@@ -27,7 +27,7 @@ func Login(db *sql.DB, sc *session.Cache, logger *slog.Logger) http.HandlerFunc 
 
 		start := time.Now()
 		success, userID := constantTimeCompare(ctx, logger, db, username, password)
-		logger.DebugContext(ctx, "constant time compare called", "duration", time.Since(start))
+		logger.DebugContext(ctx, "Constant time compare called", "duration", time.Since(start))
 		if !success {
 			logger.WarnContext(ctx, "Failed login attempt", "username", username)
 			http.Error(w, "Invalid username or password", http.StatusUnauthorized)

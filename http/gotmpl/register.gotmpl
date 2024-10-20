@@ -23,6 +23,7 @@
         <div class="input-field">
             <input type="password" name="confirm_password" placeholder="Confirm Password" required>
         </div>
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
         <input type="submit" value="Register">
     </form>
     
