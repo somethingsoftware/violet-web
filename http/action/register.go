@@ -1,6 +1,7 @@
 package action
 
 import (
+	"context"
 	"database/sql"
 	"encoding/base64"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/somethingsoftware/violet-web/http/auth"
 )
 
@@ -21,8 +23,12 @@ const usernameLenMax = 32
 
 const passwordLenMin = 12
 
-func Register(db *sql.DB) http.HandlerFunc {
+func Register(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		request_id := uuid.New().String()
+		ctx = context.WithValue(ctx, "request_id", request_id)
+
 		username := r.FormValue("username")
 		email := r.FormValue("email")
 		password := r.FormValue("password")
@@ -57,29 +63,30 @@ func Register(db *sql.DB) http.HandlerFunc {
 		hashStart := time.Now()
 		salt, hash, err := auth.NewArgon2Hash(password)
 		if err != nil {
+			slog.ErrorContext(ctx, "Failed to hash password", "error", err)
 			http.Error(w, "Failed to hash password", http.StatusInternalServerError)
-			slog.Error("Failed to hash password", "error", err)
 			return
 		}
-		slog.Info("Hashed password", "duration", time.Since(hashStart))
+		logger.Info("Hashed password", "duration", time.Since(hashStart))
 		saltString := base64.StdEncoding.EncodeToString(salt)
 		hashString := base64.StdEncoding.EncodeToString(hash)
 
 		// Verify the password/salt actually works
 		hashed, err := auth.HashArgon2(password, salt)
 		if err != nil || base64.StdEncoding.EncodeToString(hashed) != hashString {
+			logger.ErrorContext(ctx, "Failed to hash password", "error", err)
 			http.Error(w, "Failed while testing password encryption", http.StatusInternalServerError)
-			slog.Error("Failed to hash password", "error", err)
 			return
 		}
 
 		query := "INSERT INTO user (username, email, salt, password_hash) VALUES (?, ?, ?, ?);"
 		if _, err = db.Exec(query, username, email, saltString, hashString); err != nil {
+			logger.ErrorContext(ctx, "Failed to create user", "error", err)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
-			slog.Error("Failed to create user", "error", err)
 			return
 		}
 
+		logger.InfoContext(ctx, "Created user", "username", username)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}

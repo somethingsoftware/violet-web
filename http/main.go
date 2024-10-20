@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"log/slog"
 	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -27,25 +29,32 @@ func main() {
 	flag.IntVar(&httpPort, "port", 8080, "Port to listen on")
 	flag.Parse()
 
+	so := &slog.HandlerOptions{}
 	if !devMode && runtime.GOOS == "darwin" {
 		slog.Warn("Running on macOS without development mode enabled, unexpected!")
+	} else if devMode {
+		so.AddSource = true
 	}
+	defaultAttrs := []slog.Attr{slog.String("dev_mode", strconv.FormatBool(devMode))}
+	baseHandler := slog.NewTextHandler(os.Stdout, so).WithAttrs(defaultAttrs)
+	customHandler := &ContextHandler{Handler: baseHandler}
+	logger := slog.New(customHandler)
 
 	if sqlitePath == "" {
 		sqlitePath = ":memory:"
-		slog.Warn("SQLite path is empty, using in-memory database")
+		logger.Warn("SQLite path is empty, using in-memory database")
 	}
 	db, err := sql.Open("sqlite", sqlitePath)
 	if err != nil {
-		slog.Error("Failed to open SQLite", "error", err)
+		logger.Error("Failed to open SQLite", "error", err)
 		return
 	}
 
 	if err := migrate.AutoUP(db); err != nil {
-		slog.Error("Failed to auto migrate database", "error", err)
+		logger.Error("Failed to auto migrate database", "error", err)
 		return
 	}
-	slog.Info("Successfully migrated database")
+	logger.Info("Successfully migrated database")
 
 	// build middleware
 	sc := session.NewCache()
@@ -55,16 +64,29 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", serveUI)
-	mux.HandleFunc("POST /login", rateLimitIP(action.Login(db, sc)))
-	mux.HandleFunc("GET /user", rateLimitIP(loginRequired(action.User(db, sc))))
-	mux.HandleFunc("POST /register", rateLimitIP(action.Register(db)))
+	mux.HandleFunc("POST /login", rateLimitIP(action.Login(db, sc, logger)))
+	mux.HandleFunc("GET /user", rateLimitIP(loginRequired(action.User(db, sc, logger))))
+	mux.HandleFunc("POST /register", rateLimitIP(action.Register(db, logger)))
 
-	slog.Info("Starting server: http://localhost:" + strconv.Itoa(httpPort))
+	logger.Info("Starting server: http://localhost:" + strconv.Itoa(httpPort))
 	portString := ":" + strconv.Itoa(httpPort)
 	err = http.ListenAndServe(portString, mux)
 	if err != nil {
-		slog.Error("Failed to start server", "error", err)
+		logger.Error("Failed to start server", "error", err)
 	}
+}
+
+type ContextHandler struct {
+	slog.Handler
+}
+
+// Handle overrides the default Handle method to add context values.
+func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
+	if requestID, ok := ctx.Value("request_id").(string); ok {
+		r.AddAttrs(slog.String("request_id", requestID))
+	}
+
+	return h.Handler.Handle(ctx, r)
 }
 
 func serveUI(w http.ResponseWriter, r *http.Request) {
