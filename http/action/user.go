@@ -23,7 +23,7 @@ func User(db *sql.DB, sc *session.Cache, logger *slog.Logger) http.HandlerFunc {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		logger.InfoContext(ctx, "User page loaded session", "username", session.Username)
+		logger.DebugContext(ctx, "User page loaded session", "username", session.Username)
 
 		if _, err := fmt.Fprintf(w, "Hello, %s!", session.Username); err != nil {
 			logger.ErrorContext(ctx, "Failed to write response", "error", err)

@@ -23,22 +23,29 @@ import (
 func main() {
 	var sqlitePath string
 	var devMode bool
+	var logSource bool
 	var httpPort int
 	flag.StringVar(&sqlitePath, "sqlite", "", "Path to the SQLite database")
 	flag.BoolVar(&devMode, "dev", false, "Enable development mode")
+	flag.BoolVar(&logSource, "source", false, "Enable source logging")
 	flag.IntVar(&httpPort, "port", 8080, "Port to listen on")
 	flag.Parse()
 
 	so := &slog.HandlerOptions{}
-	if !devMode && runtime.GOOS == "darwin" {
-		slog.Warn("Running on macOS without development mode enabled, unexpected!")
-	} else if devMode {
+	if devMode {
+		so.Level = slog.LevelDebug
+	}
+	if logSource {
 		so.AddSource = true
 	}
 	defaultAttrs := []slog.Attr{slog.String("dev_mode", strconv.FormatBool(devMode))}
 	baseHandler := slog.NewTextHandler(os.Stdout, so).WithAttrs(defaultAttrs)
 	customHandler := &ContextHandler{Handler: baseHandler}
 	logger := slog.New(customHandler)
+
+	if runtime.GOOS != "linux" && !devMode {
+		logger.Warn("Not running on Linux, consider enabling development mode")
+	}
 
 	if sqlitePath == "" {
 		sqlitePath = ":memory:"
@@ -50,17 +57,17 @@ func main() {
 		return
 	}
 
-	if err := migrate.AutoUP(db); err != nil {
+	if err := migrate.AutoUP(db, logger); err != nil {
 		logger.Error("Failed to auto migrate database", "error", err)
 		return
 	}
-	logger.Info("Successfully migrated database")
+	logger.Debug("Successfully migrated database")
 
 	// build middleware
 	sc := session.NewCache()
-	loginRequired := loginChecker(sc)
+	loginRequired := loginChecker(sc, logger)
 
-	rateLimitIP := newIPRateLimiterByIP(10*time.Second, 10)
+	rateLimitIP := newIPRateLimiterByIP(logger, 10*time.Second, 10)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", serveUI)
@@ -68,7 +75,7 @@ func main() {
 	mux.HandleFunc("GET /user", rateLimitIP(loginRequired(action.User(db, sc, logger))))
 	mux.HandleFunc("POST /register", rateLimitIP(action.Register(db, logger)))
 
-	logger.Info("Starting server: http://localhost:" + strconv.Itoa(httpPort))
+	logger.Debug("Starting server: http://localhost:" + strconv.Itoa(httpPort))
 	portString := ":" + strconv.Itoa(httpPort)
 	err = http.ListenAndServe(portString, mux)
 	if err != nil {
@@ -114,14 +121,14 @@ func serveUI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func loginChecker(sc *session.Cache) func(next http.HandlerFunc) http.HandlerFunc {
+func loginChecker(sc *session.Cache, logger *slog.Logger) func(next http.HandlerFunc) http.HandlerFunc {
 	// outer building function holds the session cache
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			_, err := sc.GetSession(r)
 			if err != nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				slog.Error("Login required and failed", "error", err)
+				logger.Error("Login required and failed", "error", err)
 				return
 			}
 			next(w, r)
@@ -131,14 +138,14 @@ func loginChecker(sc *session.Cache) func(next http.HandlerFunc) http.HandlerFun
 
 type middleware func(http.HandlerFunc) http.HandlerFunc
 
-func newIPRateLimiterByIP(every time.Duration, burst int) middleware {
+func newIPRateLimiterByIP(logger *slog.Logger, every time.Duration, burst int) middleware {
 	ipLimits := sync.Map{}
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			ip := r.RemoteAddr
 			parts := strings.Split(ip, ":")
 			ip = parts[0]
-			slog.Info("checking rate limit", "ip", ip)
+
 			value, ok := ipLimits.Load(ip)
 			if !ok {
 				// TODO these should be const
@@ -148,12 +155,12 @@ func newIPRateLimiterByIP(every time.Duration, burst int) middleware {
 			}
 			limiter, ok := value.(*rate.Limiter)
 			if !ok {
-				slog.Error("Failed to cast rate.Limiter")
+				logger.Error("Failed to cast rate.Limiter")
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}
 			if !limiter.Allow() {
-				slog.Warn("Rate limit exceeded", "ip", ip)
+				logger.Warn("Rate limit exceeded", "ip", ip)
 				http.Error(w, "Too many requests", http.StatusTooManyRequests)
 				return
 			}

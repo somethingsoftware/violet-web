@@ -27,7 +27,7 @@ func main() {
 	}
 
 	// the migration script that will need to run on startup or get triggered
-	if err := migrate.AutoUP(db); err != nil {
+	if err := migrate.AutoUP(db, slog.Default()); err != nil {
 		slog.Error("Failed to migrate up", "error", err)
 		return
 	}

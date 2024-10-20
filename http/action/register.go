@@ -28,6 +28,7 @@ func Register(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 		ctx := r.Context()
 		request_id := uuid.New().String()
 		ctx = context.WithValue(ctx, "request_id", request_id)
+		logger.DebugContext(ctx, "Register action called")
 
 		username := r.FormValue("username")
 		email := r.FormValue("email")
@@ -67,7 +68,7 @@ func Register(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			http.Error(w, "Failed to hash password", http.StatusInternalServerError)
 			return
 		}
-		logger.Info("Hashed password", "duration", time.Since(hashStart))
+		logger.DebugContext(ctx, "Hashed password", "duration", time.Since(hashStart))
 		saltString := base64.StdEncoding.EncodeToString(salt)
 		hashString := base64.StdEncoding.EncodeToString(hash)
 
@@ -86,7 +87,7 @@ func Register(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			return
 		}
 
-		logger.InfoContext(ctx, "Created user", "username", username)
+		logger.DebugContext(ctx, "Created user", "username", username)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}

@@ -13,7 +13,7 @@ type migration struct {
 	sql     string
 }
 
-func AutoUP(db *sql.DB) error {
+func AutoUP(db *sql.DB, logger *slog.Logger) error {
 	const createVersionTable = "CREATE TABLE IF NOT EXISTS migration_version (version INTEGER);"
 	if _, err := db.Exec(createVersionTable); err != nil {
 		return fmt.Errorf("Failed to create migration_version table: %v", err)
@@ -40,7 +40,7 @@ func AutoUP(db *sql.DB) error {
 		}
 		currentVersion = m.version
 	}
-	slog.Info("Migrated up", "version", currentVersion)
+	logger.Debug("Migrated up", "version", currentVersion)
 
 	return nil
 }

@@ -20,14 +20,14 @@ func Login(db *sql.DB, sc *session.Cache, logger *slog.Logger) http.HandlerFunc 
 		ctx := r.Context()
 		request_id := uuid.New().String()
 		ctx = context.WithValue(ctx, "request_id", request_id)
-		logger.InfoContext(ctx, "Login page loaded")
+		logger.DebugContext(ctx, "Login page loaded")
 
 		username := r.FormValue("username")
 		password := r.FormValue("password")
 
 		start := time.Now()
 		success, userID := constantTimeCompare(ctx, logger, db, username, password)
-		logger.InfoContext(ctx, "constant time compare called", "duration", time.Since(start))
+		logger.DebugContext(ctx, "constant time compare called", "duration", time.Since(start))
 		if !success {
 			logger.WarnContext(ctx, "Failed login attempt", "username", username)
 			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
@@ -40,7 +40,7 @@ func Login(db *sql.DB, sc *session.Cache, logger *slog.Logger) http.HandlerFunc 
 			return
 		}
 		// redirect to the their page
-		logger.InfoContext(ctx, "Successful login", "username", username)
+		logger.DebugContext(ctx, "Successful login", "username", username)
 		http.Redirect(w, r, "/user", http.StatusSeeOther)
 		return
 	}
