@@ -51,7 +51,7 @@ func main() {
 	sc := session.NewCache()
 	loginRequired := loginChecker(sc)
 
-	rateLimitIP := newIPRateLimiterByIP()
+	rateLimitIP := newIPRateLimiterByIP(10*time.Second, 10)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", serveUI)
@@ -109,7 +109,7 @@ func loginChecker(sc *session.Cache) func(next http.HandlerFunc) http.HandlerFun
 
 type middleware func(http.HandlerFunc) http.HandlerFunc
 
-func newIPRateLimiterByIP() middleware {
+func newIPRateLimiterByIP(every time.Duration, burst int) middleware {
 	ipLimits := sync.Map{}
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +120,7 @@ func newIPRateLimiterByIP() middleware {
 			value, ok := ipLimits.Load(ip)
 			if !ok {
 				// TODO these should be const
-				limiter := rate.NewLimiter(rate.Every(time.Second*10), 10)
+				limiter := rate.NewLimiter(rate.Every(every), burst)
 				ipLimits.Store(ip, limiter)
 				value = limiter
 			}
