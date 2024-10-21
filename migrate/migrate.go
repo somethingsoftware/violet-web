@@ -24,6 +24,9 @@ func AutoUP(db *sql.DB, logger *slog.Logger) error {
 	err := db.QueryRow("SELECT version FROM migration_version").Scan(&currentVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		currentVersion = 0
+		if _, err := db.Exec("INSERT INTO migration_version (version) VALUES (0)"); err != nil {
+			return fmt.Errorf("failed to insert initial version: %v", err)
+		}
 	} else if err != nil {
 		return fmt.Errorf("failed to get current version: %v", err)
 	}
@@ -86,6 +89,17 @@ func migrationList() []migration {
 				user_agent TEXT NOT NULL,
 				ip TEXT NOT NULL,
 				created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+			);`,
+		},
+		{
+			5, "Create forgot password tokens table",
+			`CREATE TABLE forgot_password (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL,
+				token TEXT NOT NULL,
+				used BOOLEAN NOT NULL DEFAULT FALSE,
+				created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (user_id) REFERENCES users(id)
 			);`,
 		},
 	}

@@ -26,3 +26,5 @@ go.work.sum
 
 # starting the project using sqlite, don't version it
 sqlite.db
+
+**/.env

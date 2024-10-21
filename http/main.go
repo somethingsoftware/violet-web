@@ -75,24 +75,35 @@ func main() {
 	csrfValidate := csrfProvider.BuildValidator()
 
 	serveUI := buildServeUI(logger)
+	serveCSRF := buildServeCSRF(csrfProvider, logger)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", serveUI)
 
-	mux.HandleFunc("GET /login", serveCSRF(csrfProvider, logger))
-	mux.HandleFunc("POST /login", csrfValidate(rateLimitIP(action.Login(db, sc, logger))))
+	mux.HandleFunc("GET /login", serveCSRF)
+	mux.HandleFunc("POST /login", csrfValidate(action.Login(db, sc, logger)))
 
-	mux.HandleFunc("GET /register", serveCSRF(csrfProvider, logger))
-	mux.HandleFunc("POST /register", csrfValidate(rateLimitIP(action.Register(db, logger))))
+	mux.HandleFunc("GET /register", serveCSRF)
+	mux.HandleFunc("POST /register", csrfValidate(action.Register(db, logger)))
 
-	mux.HandleFunc("GET /user", rateLimitIP(loginRequired(action.User(db, sc, logger))))
+	mux.HandleFunc("GET /forgot", serveCSRF)
+	mux.HandleFunc("POST /forgot", csrfValidate(action.Forgot(db, logger, devMode)))
+
+	mux.HandleFunc("GET /resetpass", serveCSRF)
+	mux.HandleFunc("POST /resetpass", csrfValidate(action.ResetPass(db, logger)))
+
+	mux.HandleFunc("GET /user", loginRequired(action.User(db, sc, logger)))
+
+	// hacky way to allow global middleware
+	var muxServe http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+		mux.ServeHTTP(w, r)
+	}
+	rateLimitedServe := rateLimitIP(muxServe)
 
 	logger.Debug("Starting server: http://localhost:" + strconv.Itoa(httpPort))
 	portString := ":" + strconv.Itoa(httpPort)
-	err = http.ListenAndServe(portString, mux)
-	if err != nil {
-		logger.Error("Failed to start server", "error", err)
-	}
+	err = http.ListenAndServe(portString, rateLimitedServe)
+	logger.Error("Server Stopped.", "error", err)
 }
 
 type ContextHandler struct {
@@ -132,7 +143,7 @@ func buildServeUI(logger *slog.Logger) func(http.ResponseWriter, *http.Request) 
 	}
 }
 
-func serveCSRF(csrfProvider *csrf.Provider, logger *slog.Logger) http.HandlerFunc {
+func buildServeCSRF(csrfProvider *csrf.Provider, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, err := csrfProvider.MakeRequestToken(r)
 		if err != nil {
@@ -149,6 +160,10 @@ func serveCSRF(csrfProvider *csrf.Provider, logger *slog.Logger) http.HandlerFun
 			templatePath = "./gotmpl/login.gotmpl"
 		case "/register":
 			templatePath = "./gotmpl/register.gotmpl"
+		case "/forgot":
+			templatePath = "./gotmpl/forgot.gotmpl"
+		case "/resetpass":
+			templatePath = "./gotmpl/resetpass.gotmpl"
 		default:
 			http.Error(w, "Not found", http.StatusNotFound)
 			slog.Error("Not found", "path", r.URL.Path)
