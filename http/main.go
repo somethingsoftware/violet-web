@@ -69,7 +69,7 @@ func main() {
 	sc := session.NewCache()
 	loginRequired := loginChecker(sc, logger)
 
-	rateLimitIP := newIPRateLimiterByIP(logger, 10*time.Second, 10)
+	rateLimitIP := newIPRateLimiterByIP(logger, 1*time.Second, 10)
 
 	csrfProvider := csrf.NewProvider(db, logger)
 	csrfValidate := csrfProvider.BuildValidator()
