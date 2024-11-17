@@ -46,7 +46,7 @@ func main() {
 	logger := slog.New(customHandler)
 
 	if runtime.GOOS != "linux" && !devMode {
-		logger.Warn("Not running on Linux, consider enabling development mode")
+		logger.Warn("Not running on Linux, consider enabling --dev mode")
 	}
 
 	if sqlitePath == "" {
