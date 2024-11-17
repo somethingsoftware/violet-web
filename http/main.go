@@ -100,7 +100,7 @@ func main() {
 	}
 	rateLimitedServe := rateLimitIP(muxServe)
 
-	logger.Debug("Starting server: http://localhost:" + strconv.Itoa(httpPort))
+	logger.Info("Starting server: http://localhost:" + strconv.Itoa(httpPort))
 	portString := ":" + strconv.Itoa(httpPort)
 	err = http.ListenAndServe(portString, rateLimitedServe)
 	logger.Error("Server Stopped.", "error", err)
