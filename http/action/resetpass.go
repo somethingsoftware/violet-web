@@ -80,6 +80,8 @@ func ResetPass(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			return
 		}
 
+		// TODO: make sure they're not just using the same password
+
 		hashString, saltString, err := CheckAndHashPassword(password, passwordConfirm)
 		if err != nil {
 			if errors.Is(err, ErrPasswordMismatch) {
