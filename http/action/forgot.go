@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"net/url"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/somethingsoftware/violet-web/http/auth"
@@ -81,10 +82,20 @@ func Forgot(db *sql.DB, logger *slog.Logger, devMode bool) http.HandlerFunc {
 		q.Set("token", token)
 		u.RawQuery = q.Encode()
 
+		resetLink := u.String()
+		if !strings.HasPrefix(resetLink, "http") {
+			resetLink = "http://" + resetLink // TODO: use https if this isn't behind caddy
+		}
+
 		// for debugging just log the link instead of emailing it
-		logger.Debug("Reset password link", "link", u.String())
+		logger.Debug("Reset password link", "link", resetLink)
 
 		// redirect to the resetpass page
-		http.Redirect(w, r, "/resetpass", http.StatusSeeOther)
+		// http.Redirect(w, r, "/resetpass", http.StatusSeeOther)
+		if _, err := w.Write([]byte("Check logs for a reset link")); err != nil {
+			logger.ErrorContext(ctx, "Failed to write response", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 	}
 }

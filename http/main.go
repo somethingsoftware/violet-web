@@ -89,8 +89,8 @@ func main() {
 	mux.HandleFunc("GET /forgot", serveCSRF)
 	mux.HandleFunc("POST /forgot", csrfValidate(action.Forgot(db, logger, devMode)))
 
-	mux.HandleFunc("GET /resetpass", serveCSRF)
-	mux.HandleFunc("POST /resetpass", csrfValidate(action.ResetPass(db, logger)))
+	mux.HandleFunc("GET /resetpass", action.ResetPassForm(db, logger))
+	mux.HandleFunc("POST /resetpass", action.ResetPass(db, logger))
 
 	mux.HandleFunc("GET /user", loginRequired(action.User(db, sc, logger)))
 
@@ -126,9 +126,6 @@ func buildServeUI(logger *slog.Logger) func(http.ResponseWriter, *http.Request) 
 		case "/":
 			http.ServeFile(w, r, "./static/index.html")
 			return
-		case "/forgot":
-			http.ServeFile(w, r, "./static/forgot.html")
-			return
 		case "/favicon.ico":
 			http.ServeFile(w, r, "./static/favicon.ico")
 			return
@@ -161,9 +158,7 @@ func buildServeCSRF(csrfProvider *csrf.Provider, logger *slog.Logger) http.Handl
 		case "/register":
 			templatePath = "./gotmpl/register.gotmpl"
 		case "/forgot":
-			templatePath = "./gotmpl/forgot.gotmpl"
-		case "/resetpass":
-			templatePath = "./gotmpl/resetpass.gotmpl"
+			templatePath = "./gotmpl/forgot-pass.gotmpl"
 		default:
 			http.Error(w, "Not found", http.StatusNotFound)
 			slog.Error("Not found", "path", r.URL.Path)

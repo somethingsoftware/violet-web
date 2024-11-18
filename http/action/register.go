@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/mail"
 	"regexp"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/somethingsoftware/violet-web/http/auth"
@@ -50,33 +50,18 @@ func Register(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			return
 		}
 
-		if len(password) < passwordLenMin {
-			requirement := fmt.Sprintf("Password must be longer than %d characters", passwordLenMin)
-			http.Error(w, requirement, http.StatusBadRequest)
-			return
-		}
-		if password != passwordConfirm {
-			http.Error(w, "Passwords do not match", http.StatusBadRequest)
-			return
-		}
-		// TODO use passwordcritic here to prevent bad passwords instead of
-		// implementing arcane capitalization or inclusion rules
-		hashStart := time.Now()
-		salt, hash, err := auth.NewArgon2Hash(password)
+		hashString, saltString, err := CheckAndHashPassword(password, passwordConfirm)
 		if err != nil {
-			slog.ErrorContext(ctx, "Failed to hash password", "error", err)
-			http.Error(w, "Failed to hash password", http.StatusInternalServerError)
-			return
-		}
-		logger.DebugContext(ctx, "Hashed password", "duration", time.Since(hashStart))
-		saltString := base64.StdEncoding.EncodeToString(salt)
-		hashString := base64.StdEncoding.EncodeToString(hash)
-
-		// Verify the password/salt actually works
-		hashed, err := auth.HashArgon2(password, salt)
-		if err != nil || base64.StdEncoding.EncodeToString(hashed) != hashString {
+			if errors.Is(err, ErrPasswordMismatch) {
+				http.Error(w, "Passwords do not match", http.StatusBadRequest)
+				return
+			}
+			if errors.Is(err, ErrPasswordTooShort) {
+				http.Error(w, fmt.Sprintf("Password must be at least %d characters", passwordLenMin), http.StatusBadRequest)
+				return
+			}
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			logger.ErrorContext(ctx, "Failed to hash password", "error", err)
-			http.Error(w, "Failed while testing password encryption", http.StatusInternalServerError)
 			return
 		}
 
@@ -91,4 +76,31 @@ func Register(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+}
+
+var ErrPasswordMismatch = fmt.Errorf("passwords do not match")
+var ErrPasswordTooShort = fmt.Errorf("password must be longer than %d characters", passwordLenMin)
+
+func CheckAndHashPassword(password string, passwordConfirm string) (hashStr, saltStr string, err error) {
+	if len(password) < passwordLenMin {
+		return "", "", ErrPasswordMismatch
+	}
+	if password != passwordConfirm {
+		return "", "", ErrPasswordMismatch
+	}
+	// TODO: use passwordcritic here to prevent bad passwords instead of
+	// implementing arcane capitalization or inclusion rules
+	salt, hash, err := auth.NewArgon2Hash(password)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to hash password: %w", err)
+	}
+	saltString := base64.StdEncoding.EncodeToString(salt)
+	hashString := base64.StdEncoding.EncodeToString(hash)
+
+	// Verify the password/salt actually works
+	hashed, err := auth.HashArgon2(password, salt)
+	if err != nil || base64.StdEncoding.EncodeToString(hashed) != hashString {
+		return "", "", fmt.Errorf("failed to verify password hash: %w", err)
+	}
+	return hashString, saltString, nil
 }
